@@ -1,30 +1,29 @@
+
 from .serializers import JobSerializer
-from .models import Job
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import generics
 from django.http import HttpResponse
 
-
-def home(request):
-    return HttpResponse("Hello Zecpath Backend")
+from services.job_service import get_all_jobs
 
 
-# Existing home view
 def home(request):
     return HttpResponse("Hello Zecpath Backend")
 
 
 # 1. Job List API
 class JobListAPI(generics.ListAPIView):
-    queryset = Job.objects.all()
     serializer_class = JobSerializer
+
+    def get_queryset(self):
+        return get_all_jobs()
 
 
 # 2. Job Create API
 class JobCreateAPI(generics.CreateAPIView):
-    queryset = Job.objects.all()
     serializer_class = JobSerializer
+    queryset = JobSerializer.Meta.model.objects.all()
 
 
 # 3. User Test API
