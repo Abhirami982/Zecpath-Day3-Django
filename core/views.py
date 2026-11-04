@@ -1,4 +1,5 @@
-
+from rest_framework.permissions import IsAuthenticated
+from accounts.permissions import IsAdmin, IsEmployer
 from django.http import HttpResponse
 from rest_framework import generics
 from rest_framework.decorators import api_view
@@ -28,6 +29,7 @@ class JobCreateAPI(generics.CreateAPIView):
 
     queryset = Job.objects.all()
     serializer_class = JobSerializer
+    permission_classes = [IsAuthenticated, IsAdmin | IsEmployer]
 
 
 @api_view(["GET"])

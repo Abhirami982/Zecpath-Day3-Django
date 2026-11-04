@@ -1,9 +1,22 @@
+
 from django.db import models
+from django.conf import settings
 
 
 class User(models.Model):
+    ROLE_CHOICES = [
+        ('candidate', 'Candidate'),
+        ('employer', 'Employer'),
+        ('admin', 'Admin'),
+    ]
+
     name = models.CharField(max_length=100)
     email = models.EmailField()
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default='candidate'
+    )
 
     def __str__(self):
         return self.name
@@ -29,7 +42,10 @@ class Application(models.Model):
 
 
 class Employer(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE
+    )
     company_name = models.CharField(max_length=200)
     company_description = models.TextField(blank=True)
 
@@ -38,7 +54,10 @@ class Employer(models.Model):
 
 
 class Candidate(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE
+    )
     full_name = models.CharField(max_length=200)
     skills = models.TextField(blank=True)
 
