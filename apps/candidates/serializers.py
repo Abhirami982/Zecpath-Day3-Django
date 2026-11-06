@@ -1,9 +1,14 @@
-
 from rest_framework import serializers
 from .models import CandidateProfile
 
 
 class CandidateProfileSerializer(serializers.ModelSerializer):
+    resume = serializers.SerializerMethodField()
+
+    def get_resume(self, obj):
+        if obj.resume:
+            return obj.resume.name
+        return None
 
     class Meta:
         model = CandidateProfile
@@ -14,6 +19,7 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
             'education',
             'experience',
             'expected_salary',
+            'resume',
             'created_at',
             'updated_at',
         ]

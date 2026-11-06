@@ -1,4 +1,3 @@
-
 from django.db import models
 from django.conf import settings
 
@@ -18,6 +17,13 @@ class CandidateProfile(models.Model):
     expected_salary = models.DecimalField(
         max_digits=10,
         decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    # Resume upload field
+    resume = models.FileField(
+        upload_to="resumes/",
         null=True,
         blank=True
     )
