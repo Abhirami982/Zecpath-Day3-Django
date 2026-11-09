@@ -12,3 +12,15 @@ DATABASES = {
 # Media Configuration
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
+}
+REST_FRAMEWORK = {
+    **REST_FRAMEWORK,
+    'DEFAULT_PAGINATION_CLASS': 'core.pagination.CustomPagination',
+    'PAGE_SIZE': 5,
+}

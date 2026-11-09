@@ -1,3 +1,4 @@
+
 from django.db import models
 from django.conf import settings
 
@@ -32,6 +33,14 @@ class CandidateProfile(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["is_deleted", "created_at"],
+                name="cand_active_created_idx"
+            ),
+        ]
 
     def __str__(self):
         return f"Candidate Profile - {self.user.email}"

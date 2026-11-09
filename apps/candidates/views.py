@@ -1,19 +1,29 @@
-from django.http import FileResponse
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.exceptions import ValidationError
-import os
 
-from rest_framework import generics
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
+from datetime import datetime, time, timedelta
+import os
+import uuid
+
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
+from django.utils import timezone
+from django.utils.dateparse import parse_date
+
+from rest_framework import generics, status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.pagination import PageNumberPagination
 
 from .models import CandidateProfile
 from .serializers import CandidateProfileSerializer
 
+
+# -----------------------------------------
+# Candidate Profile CRUD API
+# -----------------------------------------
 
 class CandidateProfileAPIView(generics.GenericAPIView):
 
@@ -33,13 +43,13 @@ class CandidateProfileAPIView(generics.GenericAPIView):
 
             if profile_id:
                 return get_object_or_404(
-                    CandidateProfile,
+                    CandidateProfile.objects.select_related("user"),
                     id=profile_id,
                     is_deleted=False
                 )
 
         return get_object_or_404(
-            CandidateProfile,
+            CandidateProfile.objects.select_related("user"),
             user=user,
             is_deleted=False
         )
@@ -50,6 +60,7 @@ class CandidateProfileAPIView(generics.GenericAPIView):
         return Response(serializer.data)
 
     def post(self, request):
+
         if request.user.role != "CANDIDATE":
             raise PermissionDenied(
                 "Only candidates can create candidate profiles."
@@ -64,7 +75,10 @@ class CandidateProfileAPIView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save(user=request.user)
 
-        return Response(serializer.data, status=201)
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED
+        )
 
     def put(self, request):
         return self.update_profile(request, partial=False)
@@ -73,6 +87,7 @@ class CandidateProfileAPIView(generics.GenericAPIView):
         return self.update_profile(request, partial=True)
 
     def update_profile(self, request, partial):
+
         profile = self.get_object()
 
         serializer = self.get_serializer(
@@ -87,15 +102,156 @@ class CandidateProfileAPIView(generics.GenericAPIView):
         return Response(serializer.data)
 
     def delete(self, request):
-        profile = self.get_object()
 
+        profile = self.get_object()
         profile.is_deleted = True
-        profile.save()
+        profile.save(update_fields=["is_deleted", "updated_at"])
 
         return Response(
             {"message": "Candidate profile deleted successfully."}
         )
 
+
+# -----------------------------------------
+# Candidate Profile Pagination
+# -----------------------------------------
+
+class CandidateProfilePagination(PageNumberPagination):
+
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+# -----------------------------------------
+# Paginated Candidate List + Search + Filters
+# -----------------------------------------
+
+class CandidateProfileListAPIView(generics.ListAPIView):
+
+    serializer_class = CandidateProfileSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = CandidateProfilePagination
+
+    def get_queryset(self):
+
+        user = self.request.user
+
+        # Role-based access
+        if user.role == "ADMIN":
+
+            queryset = CandidateProfile.objects.select_related(
+                "user"
+            ).all()
+
+        elif user.role == "CANDIDATE":
+
+            queryset = CandidateProfile.objects.select_related(
+                "user"
+            ).filter(
+                user=user,
+                is_deleted=False
+            )
+
+        else:
+            raise PermissionDenied(
+                "Only candidates and admins can access candidate profiles."
+            )
+
+        # ---------------------------------
+        # 1. Keyword Search
+        # ---------------------------------
+
+        search = self.request.query_params.get("search")
+
+        if search:
+            queryset = queryset.filter(
+                Q(skills__icontains=search) |
+                Q(education__icontains=search) |
+                Q(experience__icontains=search)
+            )
+
+        # ---------------------------------
+        # 2. Role Filter
+        # ---------------------------------
+
+        role = self.request.query_params.get("role")
+
+        if role:
+            queryset = queryset.filter(
+                user__role__iexact=role
+            )
+
+        # ---------------------------------
+        # 3. Optimized Date Filter
+        # ---------------------------------
+
+        date = self.request.query_params.get("date")
+
+        if date:
+
+            parsed_date = parse_date(date)
+
+            if parsed_date is None:
+                raise ValidationError({
+                    "date": "Use YYYY-MM-DD format."
+                })
+
+            start_datetime = timezone.make_aware(
+                datetime.combine(parsed_date, time.min)
+            )
+
+            end_datetime = start_datetime + timedelta(days=1)
+
+            queryset = queryset.filter(
+                created_at__gte=start_datetime,
+                created_at__lt=end_datetime
+            )
+
+        # ---------------------------------
+        # 4. Status Filter
+        # ---------------------------------
+
+        status_filter = self.request.query_params.get("status")
+
+        if status_filter:
+
+            status_value = status_filter.lower()
+
+            if status_value == "active":
+
+                queryset = queryset.filter(
+                    is_deleted=False
+                )
+
+            elif status_value == "deleted":
+
+                if user.role != "ADMIN":
+                    raise PermissionDenied(
+                        "Only admins can view deleted profiles."
+                    )
+
+                queryset = queryset.filter(
+                    is_deleted=True
+                )
+
+            else:
+                raise ValidationError({
+                    "status": "Use active or deleted."
+                })
+
+        else:
+            # Show active profiles by default
+            queryset = queryset.filter(
+                is_deleted=False
+            )
+
+        return queryset.order_by("id")
+
+
+# -----------------------------------------
+# Resume Upload API
+# -----------------------------------------
 
 class ResumeUploadAPIView(APIView):
 
@@ -104,20 +260,17 @@ class ResumeUploadAPIView(APIView):
 
     def post(self, request):
 
-        # Allow only candidates
         if request.user.role != "CANDIDATE":
             raise PermissionDenied(
                 "Only candidates can upload resumes."
             )
 
-        # Get candidate profile
         profile = get_object_or_404(
             CandidateProfile,
             user=request.user,
             is_deleted=False
         )
 
-        # Get uploaded file
         uploaded_file = request.FILES.get("resume")
 
         if not uploaded_file:
@@ -163,13 +316,11 @@ class ResumeUploadAPIView(APIView):
                 {"resume": "Invalid DOCX file."}
             )
 
-        # Generate a unique filename
-        import uuid
+        # Generate unique filename
         uploaded_file.name = f"{uuid.uuid4().hex}{extension}"
 
-        # Save resume
         profile.resume = uploaded_file
-        profile.save()
+        profile.save(update_fields=["resume", "updated_at"])
 
         return Response(
             {
@@ -178,6 +329,12 @@ class ResumeUploadAPIView(APIView):
             },
             status=status.HTTP_201_CREATED
         )
+
+
+# -----------------------------------------
+# Resume Download API
+# -----------------------------------------
+
 class ResumeDownloadAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -186,22 +343,23 @@ class ResumeDownloadAPIView(APIView):
 
         user = request.user
 
-        # Allow candidates and admins only
         if user.role not in ["CANDIDATE", "ADMIN"]:
             raise PermissionDenied(
                 "Only candidates and admins can download resumes."
             )
 
-        # Candidates can download only their own resume
+        # Candidate can download own resume
         if user.role == "CANDIDATE":
+
             profile = get_object_or_404(
                 CandidateProfile,
                 user=user,
                 is_deleted=False
             )
 
-        # Admins must specify the candidate profile ID
+        # Admin must provide candidate ID
         else:
+
             candidate_id = request.query_params.get("candidate_id")
 
             if not candidate_id:
@@ -215,19 +373,16 @@ class ResumeDownloadAPIView(APIView):
                 is_deleted=False
             )
 
-        # Check whether a resume exists
         if not profile.resume:
             raise ValidationError(
                 {"resume": "No resume uploaded."}
             )
 
-        # Check whether the physical file exists
         if not profile.resume.storage.exists(profile.resume.name):
             raise ValidationError(
                 {"resume": "Resume file not found in storage."}
             )
 
-        # Return the file as a download
         return FileResponse(
             profile.resume.open("rb"),
             as_attachment=True,
