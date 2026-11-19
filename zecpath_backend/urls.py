@@ -1,6 +1,7 @@
 
 from django.contrib import admin
 from django.urls import path, include
+from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -16,4 +17,10 @@ urlpatterns = [
         'api/employers/',
         include('apps.employers.urls')
     ),
+
+    path(
+        'api/jobs/',
+        include('apps.jobs.urls')
+    ),
+    path("api/applications/", include("apps.applications.urls")),
 ]
