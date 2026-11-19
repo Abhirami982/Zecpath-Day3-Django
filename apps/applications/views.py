@@ -11,8 +11,8 @@ from rest_framework import status
 
 from apps.candidates.models import CandidateProfile
 from apps.jobs.models import Job
-from .models import Application
 from apps.employers.models import EmployerProfile
+from .models import Application
 
 
 class ApplyJobAPIView(APIView):
@@ -71,7 +71,7 @@ class ApplyJobAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Create application and copy resume snapshot
+        # Copy resume snapshot
         candidate.resume.open("rb")
         resume_content = candidate.resume.read()
         original_name = Path(candidate.resume.name).name
@@ -134,7 +134,7 @@ class ApplicationHistoryAPIView(APIView):
                 "job_id": application.job.id,
                 "job_title": application.job.title,
                 "status": application.status,
-                "applied_at": application.applied_at,
+                "applied_at": application.applied_at
             })
 
         return Response({
@@ -174,7 +174,7 @@ class AppliedJobsAPIView(APIView):
                 "job_title": application.job.title,
                 "application_id": application.id,
                 "application_status": application.status,
-                "applied_at": application.applied_at,
+                "applied_at": application.applied_at
             })
 
         return Response({
@@ -187,6 +187,15 @@ class AppliedJobsAPIView(APIView):
 class EmployerApplicationStatusAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
+
+    # Allowed workflow transitions
+    ALLOWED_TRANSITIONS = {
+        "APPLIED": ["SHORTLISTED", "REJECTED"],
+        "SHORTLISTED": ["INTERVIEW_SCHEDULED", "REJECTED"],
+        "INTERVIEW_SCHEDULED": ["SELECTED", "REJECTED"],
+        "REJECTED": [],
+        "SELECTED": []
+    }
 
     def patch(self, request, application_id):
 
@@ -212,23 +221,37 @@ class EmployerApplicationStatusAPIView(APIView):
         # Check job ownership
         if application.job.employer_id != employer.id:
             return Response(
-                {"error": "You cannot update applications for another employer's job."},
+                {
+                    "error": "You cannot update applications for another employer's job."
+                },
                 status=status.HTTP_403_FORBIDDEN
             )
 
         # Get new status
         new_status = request.data.get("status")
 
+        # Validate status
         if new_status not in Application.Status.values:
             return Response(
                 {"error": "Invalid application status."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Prevent changes to final statuses
-        if application.status in ["REJECTED", "SELECTED"]:
+        # Get current status
+        current_status = application.status
+
+        # Check allowed transition
+        allowed_statuses = self.ALLOWED_TRANSITIONS.get(
+            current_status, []
+        )
+
+        if new_status not in allowed_statuses:
             return Response(
-                {"error": "Application status is already finalized."},
+                {
+                    "error": "Invalid workflow transition.",
+                    "current_status": current_status,
+                    "allowed_next_statuses": allowed_statuses
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -240,6 +263,7 @@ class EmployerApplicationStatusAPIView(APIView):
             "success": True,
             "message": "Application status updated successfully.",
             "application_id": application.id,
+            "previous_status": current_status,
             "new_status": application.status,
             "updated_at": application.updated_at
         })
