@@ -12,6 +12,7 @@ from rest_framework import status
 from apps.candidates.models import CandidateProfile
 from apps.jobs.models import Job
 from .models import Application
+from apps.employers.models import EmployerProfile
 
 
 class ApplyJobAPIView(APIView):
@@ -180,4 +181,65 @@ class AppliedJobsAPIView(APIView):
             "success": True,
             "count": len(data),
             "applied_jobs": data
+        })
+
+
+class EmployerApplicationStatusAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, application_id):
+
+        # Employer-only access
+        if request.user.role != "EMPLOYER":
+            return Response(
+                {"error": "Only employers can update application status."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get employer profile
+        employer = get_object_or_404(
+            EmployerProfile,
+            user=request.user
+        )
+
+        # Get application
+        application = get_object_or_404(
+            Application,
+            id=application_id
+        )
+
+        # Check job ownership
+        if application.job.employer_id != employer.id:
+            return Response(
+                {"error": "You cannot update applications for another employer's job."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get new status
+        new_status = request.data.get("status")
+
+        if new_status not in Application.Status.values:
+            return Response(
+                {"error": "Invalid application status."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Prevent changes to final statuses
+        if application.status in ["REJECTED", "SELECTED"]:
+            return Response(
+                {"error": "Application status is already finalized."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update status
+        application.status = new_status
+        application.save()
+
+        return Response({
+            "success": True,
+            "message": "Application status updated successfully.",
+            "application_id": application.id,
+            "new_status": application.status,
+            "updated_at": application.updated_at
         })
