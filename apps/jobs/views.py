@@ -2,7 +2,8 @@
 import re
 
 from django.db.models import Q
-from rest_framework import generics
+from rest_framework import generics, status
+from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 
@@ -189,3 +190,46 @@ class LatestJobListAPIView(generics.ListAPIView):
         return optimized_public_jobs().filter(
             status='ACTIVE'
         ).order_by('-created_at')[:10]
+# DAY 20 - EMPLOYER DASHBOARD APIs
+
+class EmployerDashboardJobListAPIView(generics.ListAPIView):
+    serializer_class = JobSerializer
+    permission_classes = [IsAuthenticated, IsEmployer]
+
+    def get_queryset(self):
+        return Job.objects.filter(
+            employer__user=self.request.user,
+            employer__is_deleted=False
+        ).order_by('-created_at')
+
+
+class EmployerDashboardJobUpdateAPIView(generics.UpdateAPIView):
+    serializer_class = JobSerializer
+    permission_classes = [IsAuthenticated, IsEmployer]
+
+    def get_queryset(self):
+        return Job.objects.filter(
+            employer__user=self.request.user,
+            employer__is_deleted=False
+        )
+
+
+class EmployerDashboardCloseHiringAPIView(generics.GenericAPIView):
+    serializer_class = JobStatusSerializer
+    permission_classes = [IsAuthenticated, IsEmployer]
+
+    def get_queryset(self):
+        return Job.objects.filter(
+            employer__user=self.request.user,
+            employer__is_deleted=False
+        )
+
+    def patch(self, request, *args, **kwargs):
+        job = self.get_object()
+        job.status = 'INACTIVE'
+        job.save(update_fields=['status', 'updated_at'])
+
+        return Response({
+            'message': 'Hiring closed successfully.',
+            'job': JobStatusSerializer(job).data
+        }, status=status.HTTP_200_OK)

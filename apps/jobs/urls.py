@@ -8,6 +8,9 @@ from .views import (
     ActiveJobListAPIView,
     FeaturedJobListAPIView,
     LatestJobListAPIView,
+    EmployerDashboardJobListAPIView,
+    EmployerDashboardJobUpdateAPIView,
+    EmployerDashboardCloseHiringAPIView,
 )
 
 urlpatterns = [
@@ -20,4 +23,9 @@ urlpatterns = [
     path('list/', ActiveJobListAPIView.as_view(), name='active-job-list'),
     path('featured/', FeaturedJobListAPIView.as_view(), name='featured-jobs'),
     path('latest/', LatestJobListAPIView.as_view(), name='latest-jobs'),
+
+    # Day 20 Employer Dashboard APIs
+    path('dashboard/jobs/', EmployerDashboardJobListAPIView.as_view(), name='employer-dashboard-jobs'),
+    path('dashboard/jobs/<int:pk>/update/', EmployerDashboardJobUpdateAPIView.as_view(), name='employer-dashboard-job-update'),
+    path('dashboard/jobs/<int:pk>/close/', EmployerDashboardCloseHiringAPIView.as_view(), name='employer-dashboard-job-close'),
 ]
