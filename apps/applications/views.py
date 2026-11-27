@@ -1,4 +1,4 @@
-
+from django.db.models import Q
 from pathlib import Path
 
 from django.shortcuts import get_object_or_404
@@ -266,4 +266,74 @@ class EmployerApplicationStatusAPIView(APIView):
             "previous_status": current_status,
             "new_status": application.status,
             "updated_at": application.updated_at
+        })
+
+
+class EmployerCandidatePipelineAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        # Employer-only access
+        if request.user.role != "EMPLOYER":
+            return Response(
+                {"error": "Only employers can view the candidate pipeline."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        employer = get_object_or_404(
+            EmployerProfile,
+            user=request.user
+        )
+
+        # Get applications for this employer's jobs
+        applications = Application.objects.filter(
+            job__employer=employer
+        ).select_related(
+            "candidate__user", "job"
+        ).order_by("-applied_at")
+
+        # Filter by application status
+        application_status = request.query_params.get("status")
+
+        if application_status:
+            if application_status not in Application.Status.values:
+                return Response(
+                    {"error": "Invalid application status."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            applications = applications.filter(
+                status=application_status
+            )
+
+        # Search by username, email or job title
+        search = request.query_params.get("search")
+
+        if search:
+            applications = applications.filter(
+                Q(candidate__user__username__icontains=search) |
+                Q(candidate__user__email__icontains=search) |
+                Q(job__title__icontains=search)
+            )
+
+        data = []
+
+        for application in applications:
+            data.append({
+                "application_id": application.id,
+                "candidate_id": application.candidate.id,
+                "candidate_name": application.candidate.user.username,
+                "candidate_email": application.candidate.user.email,
+                "job_id": application.job.id,
+                "job_title": application.job.title,
+                "status": application.status,
+                "applied_at": application.applied_at
+            })
+
+        return Response({
+            "success": True,
+            "count": len(data),
+            "candidates": data
         })

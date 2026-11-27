@@ -1,9 +1,11 @@
+
 from django.urls import path
 from .views import (
     ApplyJobAPIView,
     ApplicationHistoryAPIView,
     AppliedJobsAPIView,
     EmployerApplicationStatusAPIView,
+    EmployerCandidatePipelineAPIView,
 )
 
 urlpatterns = [
@@ -29,5 +31,11 @@ urlpatterns = [
         "<int:application_id>/status/",
         EmployerApplicationStatusAPIView.as_view(),
         name="employer-application-status"
+    ),
+
+    path(
+        "candidate-pipeline/",
+        EmployerCandidatePipelineAPIView.as_view(),
+        name="candidate-pipeline"
     ),
 ]
