@@ -5,10 +5,18 @@ from .views import (
     CandidateProfileAPIView,
     CandidateProfileListAPIView,
     ResumeUploadAPIView,
-    ResumeDownloadAPIView
+    ResumeDownloadAPIView,
+    CandidateDashboardAPIView
 )
 
 urlpatterns = [
+
+    # Candidate Dashboard
+    path(
+        'dashboard/',
+        CandidateDashboardAPIView.as_view(),
+        name='candidate-dashboard'
+    ),
 
     # Paginated candidate list
     path(

@@ -1,4 +1,5 @@
-
+from django.db.models import Count
+from apps.applications.models import Application
 from datetime import datetime, time, timedelta
 import os
 import uuid
@@ -388,3 +389,79 @@ class ResumeDownloadAPIView(APIView):
             as_attachment=True,
             filename=os.path.basename(profile.resume.name)
         )
+# -----------------------------------------
+# Candidate Dashboard API
+# -----------------------------------------
+
+
+class CandidateDashboardAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        user = request.user
+
+        # Only candidates can access dashboard
+        if user.role != "CANDIDATE":
+            raise PermissionDenied(
+                "Only candidates can access the dashboard."
+            )
+
+        # Get candidate profile
+        profile = get_object_or_404(
+            CandidateProfile,
+            user=user,
+            is_deleted=False
+        )
+
+        # Get candidate applications
+        applications = Application.objects.filter(
+            candidate=profile
+        ).select_related("job").order_by("-applied_at")
+
+        # Total applications
+        total_applications = applications.count()
+
+        # Initialize status counts
+        status_summary = {
+            status_value: 0
+            for status_value, label in Application.Status.choices
+        }
+
+        # Count applications by status
+        status_counts = applications.values(
+            "status"
+        ).annotate(
+            total=Count("id")
+        )
+
+        for item in status_counts:
+            status_summary[item["status"]] = item["total"]
+
+        # Applied jobs list
+        applied_jobs = []
+
+        for application in applications:
+
+            applied_jobs.append({
+                "application_id": application.id,
+                "job_id": application.job.id,
+                "job_title": application.job.title,
+                "status": application.status,
+                "applied_at": application.applied_at
+            })
+
+        return Response({
+            "success": True,
+            "dashboard": {
+                "candidate": {
+                    "candidate_id": profile.id,
+                    "username": user.username,
+                    "email": user.email
+                },
+                "total_applications": total_applications,
+                "status_summary": status_summary,
+                "applied_jobs": applied_jobs
+            }
+        })
